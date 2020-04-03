@@ -7,76 +7,105 @@ def main():
     data = io.loadmat('ex4data1.mat')
     X = data['X']
     y = data['y']
-    m = X.shape[0]
+    #m = X.shape[0]
     in_size = 400
     hid_size = 25
     out_size = 10
+    neuralnet = NeuralNet(in_size, hid_size, out_size, X, y)
     lamda = 1.3
-    X = np.concatenate((np.ones((m,1)), X), axis=1)
+    #X = np.concatenate((np.ones((m,1)), X), axis=1)
     weights = io.loadmat('ex4weights.mat')
     Theta1 = weights['Theta1']
     Theta2 = weights['Theta2']
     thetas = np.concatenate((Theta1.ravel(), Theta2.ravel()))
     #can only optimize over 1d arrays, so have to flatten thetas
-    print costFunction(thetas, in_size, hid_size, out_size, X, y, 0)
-    print costFunction(thetas, in_size, hid_size, out_size, X, y, 1)
+    print neuralnet.costFunction(thetas, 0)
+    print neuralnet.costFunction(thetas, 1)
+    #print costFunction(thetas, in_size, hid_size, out_size, X, y, 0)
+    #print costFunction(thetas, in_size, hid_size, out_size, X, y, 1)
 
-    init_theta1 = initializeWeights(in_size, hid_size)
-    init_theta2 = initializeWeights(hid_size, out_size)
-    init_thetas = np.concatenate((init_theta1.ravel(), init_theta2.ravel()))
+    #init_theta1 = initializeWeights(in_size, hid_size)
+    #init_theta2 = initializeWeights(hid_size, out_size)
+    init_thetas = neuralnet.randInitialThetas()#np.concatenate((init_theta1.ravel(), init_theta2.ravel()))
 
     checkGradients(1)
-    print costFunction(thetas, in_size, hid_size, out_size, X, y, 3)
+    print neuralnet.costFunction(thetas, 3)
 
     lamda = 1.3
-    Result = op.minimize(fun = costFunction, x0 = init_thetas,
-                args = (in_size, hid_size, out_size, X, y, lamda),
-                method = 'CG', jac = gradient, options = {'maxiter': 200})
+    Result = op.minimize(fun = neuralnet.costFunction, x0 = init_thetas,
+                args = (lamda), method = 'CG',
+                jac = neuralnet.gradient, options = {'maxiter': 200})
     thetas = Result.x
-    Theta1 = thetas[:hid_size*(in_size+1)].reshape(hid_size, in_size+1)
-    Theta2 = thetas[hid_size*(in_size+1):].reshape(out_size, hid_size+1)
-    a2 = np.concatenate((np.ones((m,1)), sigmoid(X.dot(Theta1.T))), axis=1)
-    a3 = sigmoid(a2.dot(Theta2.T))
-    pred = np.argmax(a3, axis=1)
-    score = (pred + 1 == y.ravel()).mean() * 100
-    print "Neural net accuracy:", score
+    #Theta1, Theta2 = neuralnet.reshapeThetas(thetas)
+    #Theta1 = thetas[:hid_size*(in_size+1)].reshape(hid_size, in_size+1)
+    #Theta2 = thetas[hid_size*(in_size+1):].reshape(out_size, hid_size+1)
+    #a2 = padLeftColumn(sigmoid(X.dot(Theta1.T)), 1)
+    #a3 = sigmoid(a2.dot(Theta2.T))
+    #pred = np.argmax(a3, axis=1)
+    #score = (pred + 1 == y.ravel()).mean() * 100
+    print "Neural net accuracy:", neuralnet.score(thetas)
+
+class NeuralNet:
+    def __init__(self, in_size, hid_size, out_size, X, y):
+        self.m = X.shape[0]
+        self.X = padLeftColumn(X, 1)
+        self.y = y
+        self.y_mat = range(1,out_size+1) == y
+        self.in_size = in_size
+        self.hid_size = hid_size
+        self.out_size = out_size
+
+    def costFunction(self, thetas, lamda):
+        Theta1, Theta2 = self.reshapeThetas(thetas)
+        z2 = self.X.dot(Theta1.T)
+        a2 = padLeftColumn(sigmoid(z2), 1)
+        a3 = sigmoid(a2.dot(Theta2.T))
+
+        return (-self.y_mat.ravel().dot(np.log(a3.ravel())) - 
+                (1 - self.y_mat.ravel()).dot(np.log(1 - a3.ravel()))
+                + lamda/2.*(Theta1[:,1:].ravel().dot(Theta1[:,1:].ravel())
+                + Theta2[:,1:].ravel().dot(Theta2[:,1:].ravel())))/self.m
+
+    def gradient(self, thetas, lamda):
+        Theta1, Theta2 = self.reshapeThetas(thetas)
+        z2 = self.X.dot(Theta1.T)
+        a2 = padLeftColumn(sigmoid(z2), 1)
+        a3 = sigmoid(a2.dot(Theta2.T))
+
+        T1_no_first = padLeftColumn(Theta1[:,1:], 0)
+        T2_no_first = padLeftColumn(Theta2[:,1:], 0)
+
+        delta3 = a3 - self.y_mat
+        delta2 = delta3.dot(Theta2)[:,1:] * sigmoidGradient(z2)
+
+        Theta1_grad = (delta2.T.dot(self.X) + lamda*T1_no_first)/self.m
+        Theta2_grad = (delta3.T.dot(a2) + lamda*T2_no_first)/self.m
+
+        return np.concatenate((Theta1_grad.ravel(), Theta2_grad.ravel()))
     
+    def reshapeThetas(self, thetas):
+        Theta1 = thetas[:self.hid_size*(self.in_size+1)].reshape(
+                    self.hid_size, self.in_size+1)
+        Theta2 = thetas[self.hid_size*(self.in_size+1):].reshape(
+                    self.out_size, self.hid_size+1)
+        return Theta1, Theta2
 
-def costFunction(thetas, in_size, hid_size, out_size, X, y, lamda):
-    Theta1 = thetas[:hid_size*(in_size+1)].reshape(hid_size, in_size+1)
-    Theta2 = thetas[hid_size*(in_size+1):].reshape(out_size, hid_size+1)
-    m = X.shape[0]
+    def randInitialThetas(self):
+        eps = 0.12
+        init_t1 = (2*np.random.rand(self.hid_size, self.in_size+1) - 1)*eps
+        init_t2 = (2*np.random.rand(self.out_size, self.hid_size+1) - 1)*eps
+        return np.concatenate((init_t1.ravel(), init_t2.ravel()))
 
-    z2 = X.dot(Theta1.T)
-    a2 = np.concatenate((np.ones((m,1)), sigmoid(z2)), axis=1)
-    a3 = sigmoid(a2.dot(Theta2.T))
+    def score(self, thetas):
+        Theta1, Theta2 = self.reshapeThetas(thetas)
+        a2 = padLeftColumn(sigmoid(self.X.dot(Theta1.T)), 1)
+        a3 = sigmoid(a2.dot(Theta2.T))
+        pred = np.argmax(a3, axis=1)
+        return (pred + 1 == self.y.ravel()).mean() * 100
 
-    y_mat = range(1,out_size+1) == y
-    return (-y_mat.ravel().dot(np.log(a3.ravel())) - (1 - y_mat.ravel()).dot(
-        np.log(1 - a3.ravel()))
-        + lamda/2.*(Theta1[:,1:].ravel().dot(Theta1[:,1:].ravel()) + 
-            Theta2[:,1:].ravel().dot(Theta2[:,1:].ravel())))/m
 
-def gradient(thetas, in_size, hid_size, out_size, X, y, lamda):
-    Theta1 = thetas[:hid_size*(in_size+1)].reshape(hid_size, in_size+1)
-    Theta2 = thetas[hid_size*(in_size+1):].reshape(out_size, hid_size+1)
-    m = X.shape[0]
-
-    z2 = X.dot(Theta1.T)
-    a2 = np.concatenate((np.ones((m,1)), sigmoid(z2)), axis=1)
-    a3 = sigmoid(a2.dot(Theta2.T))
-
-    y_mat = range(1,out_size+1) == y
-    T1_no_first = np.concatenate((np.zeros((hid_size,1)), Theta1[:,1:]),axis=1)
-    T2_no_first = np.concatenate((np.zeros((out_size,1)), Theta2[:,1:]),axis=1)
-
-    delta3 = a3 - y_mat
-    delta2 = delta3.dot(Theta2)[:,1:] * sigmoidGradient(z2)
-
-    Theta1_grad = (delta2.T.dot(X) + lamda*T1_no_first)/m
-    Theta2_grad = (delta3.T.dot(a2) + lamda*T2_no_first)/m
-
-    return np.concatenate((Theta1_grad.ravel(), Theta2_grad.ravel()))
+def padLeftColumn(mat, fill_value):
+    return np.concatenate((np.full((mat.shape[0],1), fill_value), mat), axis=1)
 
 def checkGradients(lamda):
     in_size = 3
@@ -87,12 +116,13 @@ def checkGradients(lamda):
     T1 = np.sin(range(hid_size*(in_size+1))).reshape(hid_size,in_size+1)/10
     T2 = np.sin(range(out_size*(hid_size+1))).reshape(out_size,hid_size+1)/10
     X = np.sin(range(m*in_size)).reshape(m, in_size)/10
-    X = np.concatenate((np.ones((m,1)), X), axis=1)
     y = np.mod(range(m), out_size)[:,None]
 
+    testNN = NeuralNet(in_size, hid_size, out_size, X, y)
+
     thetas = np.concatenate((T1.ravel(), T2.ravel()))
-    grad = gradient(thetas, in_size, hid_size, out_size, X, y, lamda)
-    fun = lambda p: costFunction(p, in_size, hid_size, out_size, X, y, lamda)
+    grad = testNN.gradient(thetas, lamda)
+    fun = lambda p: testNN.costFunction(p, lamda)
     numgrad = numericalGradient(fun, thetas)
     print "Numerical gradient:", numgrad
     print "Analytical gradient:", grad
@@ -115,9 +145,9 @@ def sigmoid(z):
 def sigmoidGradient(z):
     return sigmoid(z) * (1 - sigmoid(z))
 
-def initializeWeights(l_in, l_out):
-    eps = 0.12
-    return (2*np.random.rand(l_out, l_in + 1)-1)*eps
+#def initializeWeights(l_in, l_out):
+    #eps = 0.12
+    #return (2*np.random.rand(l_out, l_in + 1)-1)*eps
 
 if __name__ == '__main__':
     main()
