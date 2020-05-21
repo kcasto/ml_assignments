@@ -7,13 +7,11 @@ def main():
     data = io.loadmat('ex4data1.mat')
     X = data['X']
     y = data['y']
-    #m = X.shape[0]
     in_size = 400
     hid_size = 25
     out_size = 10
     neuralnet = NeuralNet(in_size, hid_size, out_size, X, y)
     lamda = 1.3
-    #X = np.concatenate((np.ones((m,1)), X), axis=1)
     weights = io.loadmat('ex4weights.mat')
     Theta1 = weights['Theta1']
     Theta2 = weights['Theta2']
@@ -21,13 +19,7 @@ def main():
     #can only optimize over 1d arrays, so have to flatten thetas
     print neuralnet.costFunction(thetas, 0)
     print neuralnet.costFunction(thetas, 1)
-    #print costFunction(thetas, in_size, hid_size, out_size, X, y, 0)
-    #print costFunction(thetas, in_size, hid_size, out_size, X, y, 1)
-
-    #init_theta1 = initializeWeights(in_size, hid_size)
-    #init_theta2 = initializeWeights(hid_size, out_size)
-    init_thetas = neuralnet.randInitialThetas()#np.concatenate((init_theta1.ravel(), init_theta2.ravel()))
-
+    init_thetas = neuralnet.randInitialThetas()
     checkGradients(1)
     print neuralnet.costFunction(thetas, 3)
 
@@ -36,13 +28,6 @@ def main():
                 args = (lamda), method = 'CG',
                 jac = neuralnet.gradient, options = {'maxiter': 200})
     thetas = Result.x
-    #Theta1, Theta2 = neuralnet.reshapeThetas(thetas)
-    #Theta1 = thetas[:hid_size*(in_size+1)].reshape(hid_size, in_size+1)
-    #Theta2 = thetas[hid_size*(in_size+1):].reshape(out_size, hid_size+1)
-    #a2 = padLeftColumn(sigmoid(X.dot(Theta1.T)), 1)
-    #a3 = sigmoid(a2.dot(Theta2.T))
-    #pred = np.argmax(a3, axis=1)
-    #score = (pred + 1 == y.ravel()).mean() * 100
     print "Neural net accuracy:", neuralnet.score(thetas)
 
 class NeuralNet:
@@ -144,10 +129,6 @@ def sigmoid(z):
 
 def sigmoidGradient(z):
     return sigmoid(z) * (1 - sigmoid(z))
-
-#def initializeWeights(l_in, l_out):
-    #eps = 0.12
-    #return (2*np.random.rand(l_out, l_in + 1)-1)*eps
 
 if __name__ == '__main__':
     main()
